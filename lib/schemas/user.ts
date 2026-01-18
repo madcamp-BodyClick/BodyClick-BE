@@ -1,41 +1,35 @@
-// lib/schemas/user.ts
 import { z } from 'zod';
 import { extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
-import { registry } from '@/lib/swagger'; // 위에서 만든 레지스트리
+import { registry } from '@/lib/swagger';
 
-// Zod에 OpenAPI 기능을 확장합니다 (앱 실행 시 한 번만 호출되면 됨)
 extendZodWithOpenApi(z);
 
-// 1. Zod 스키마 정의 + OpenAPI 메타데이터
+// 1. Prisma 모델 및 구글 프로필에 맞게 스키마 수정
 export const UserSchema = z.object({
-  id: z.string().uuid().openapi({ example: '123e4567-e89b-12d3-a456-426614174000' }),
-  username: z.string().min(3).openapi({ example: 'cs_major', description: '사용자 ID' }),
-  age: z.number().int().openapi({ example: 24 }),
-}).openapi('User'); // 'User'라는 이름으로 Component에 등록됨
+  id: z.string().uuid().openapi({ example: 'uuid-string-123' }),
+  name: z.string().openapi({ example: '홍길동', description: '구글 계정 이름' }),
+  email: z.string().email().openapi({ example: 'user@gmail.com' }),
+  image: z.string().url().nullable().openapi({ example: 'https://lh3.googleusercontent.com/...' }),
+}).openapi('User');
 
-// 2. API 경로(Path) 정의
-// 실제 라우트 핸들러가 아니라 "문서상의 정의"입니다.
+// 2. 삭제된 POST /users 등록 코드 제거 및 세션 확인 API로 대체
+// 기존의 registry.registerPath({ method: 'post', path: '/users', ... }) 부분은 삭제하세요.
+
 registry.registerPath({
-  method: 'post',
-  path: '/users',
-  description: '새로운 유저를 생성합니다.',
-  summary: '유저 생성 API',
-  tags: ['User'],
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: UserSchema.omit({ id: true }), // id는 서버 생성이라 제외
-        },
-      },
-    },
-  },
+  method: 'get',
+  path: '/api/auth/session',
+  description: '현재 로그인된 유저의 세션 정보를 가져옵니다.',
+  summary: '세션 정보 조회 (구글 로그인 상태 확인)',
+  tags: ['Auth'],
   responses: {
     200: {
-      description: '유저 생성 성공',
+      description: '세션 조회 성공',
       content: {
         'application/json': {
-          schema: UserSchema,
+          schema: z.object({
+            user: UserSchema,
+            expires: z.string(),
+          }),
         },
       },
     },
