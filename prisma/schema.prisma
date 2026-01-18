@@ -1,0 +1,241 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// 1. 설정 (Prisma 5.22.0 기준)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. 사용자 및 인증 (Auth & User Domain)
+// ==========================================
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+model User {
+  // UUID (PK)
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  password      String?   // Credentials 로그인 시 필요 (이미지엔 없지만 필수 권장)
+  birthDate     DateTime? @map("birth_date") @db.Date
+  gender        Gender?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // 관계 설정 (Relations)
+  accounts           Account[]
+  sessions           Session[]
+  userQueries        UserQuery[]
+  medicalContext     UserMedicalContext? // 1:1 관계
+  bodyPartViews      BodyPartView[]
+  bookmarkBodyParts  BookmarkBodyPart[]
+  bookmarkHospitals  BookmarkHospital[]
+
+  @@map("users")
+}
+
+// NextAuth 소셜 로그인을 위한 계정 테이블
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 복합 유니크 인덱스 (Constraint)
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// NextAuth 세션 관리 테이블
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ==========================================
+// 2. 신체 정보 (Body Domain)
+// ==========================================
+
+model BodySystem {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique
+  nameKo      String  @map("name_ko")
+  nameEn      String  @map("name_en")
+  description String? @db.Text
+
+  bodyParts BodyPart[]
+
+  @@map("body_systems")
+}
+
+model BodyPart {
+  id                Int     @id @default(autoincrement())
+  systemId          Int     @map("system_id")
+  code              String  @unique
+  nameKo            String  @map("name_ko")
+  nameEn            String  @map("name_en")
+  
+  // JSON 데이터 타입
+  keyRoles          Json?   @map("key_roles")
+  observationPoints Json?   @map("observation_points")
+  
+  splineObjectId    String? @map("spline_object_id")
+  viewCamera        Json?   @map("view_camera")
+
+  // 관계 설정
+  system             BodySystem         @relation(fields: [systemId], references: [id])
+  diseases           Disease[]
+  relatedAgents      BodyPartAgent[]
+  queries            UserQuery[]
+  views              BodyPartView[]
+  bookmarks          BookmarkBodyPart[]
+
+  @@map("body_parts")
+}
+
+model Disease {
+  id                       Int     @id @default(autoincrement())
+  bodyPartId               Int     @map("body_part_id")
+  name                     String
+  description              String? @db.Text
+  commonSymptoms           String? @map("common_symptoms") @db.Text
+  severityLevel            Int?    @map("severity_level") // 1~5
+  requiresMedicalAttention Boolean @default(false) @map("requires_medical_attention")
+
+  bodyPart BodyPart @relation(fields: [bodyPartId], references: [id])
+
+  @@map("diseases")
+}
+
+// ==========================================
+// 3. AI 에이전트 및 상담 (AI Domain)
+// ==========================================
+
+model LlmAgent {
+  id           Int     @id @default(autoincrement())
+  name         String
+  specialty    String?
+  systemPrompt String? @map("system_prompt") @db.Text
+  model        String?
+  temperature  Float?
+  maxTokens    Int?    @map("max_tokens")
+
+  connectedBodyParts BodyPartAgent[]
+  userQueries        UserQuery[]
+  medicalContexts    UserMedicalContext[]
+
+  @@map("llm_agents")
+}
+
+// BodyPart <-> LlmAgent 다대다 연결 테이블
+model BodyPartAgent {
+  bodyPartId Int @map("body_part_id")
+  agentId    Int @map("agent_id")
+
+  bodyPart BodyPart @relation(fields: [bodyPartId], references: [id], onDelete: Cascade)
+  agent    LlmAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([bodyPartId, agentId])
+  @@map("body_part_agents")
+}
+
+model UserQuery {
+  id              Int      @id @default(autoincrement())
+  userId          String   @map("user_id") @db.Uuid
+  bodyPartId      Int?     @map("body_part_id")
+  agentId         Int?     @map("agent_id")
+  question        String   @db.Text
+  answer          String?  @db.Text
+  confidenceScore Float?   @map("confidence_score")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bodyPart BodyPart? @relation(fields: [bodyPartId], references: [id])
+  agent    LlmAgent? @relation(fields: [agentId], references: [id])
+
+  @@map("user_queries")
+}
+
+// 사용자별 의료 컨텍스트 (User와 1:1 관계)
+model UserMedicalContext {
+  userId          String    @id @map("user_id") @db.Uuid
+  summaryText     String?   @map("summary_text") @db.Text
+  agentId         Int?      @map("agent_id")
+  medicalTags     Json?     @map("medical_tags")
+  lastConsultedAt DateTime? @map("last_consulted_at")
+  riskLevel       Int?      @map("risk_level")
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent LlmAgent? @relation(fields: [agentId], references: [id])
+
+  @@map("user_medical_context")
+}
+
+// ==========================================
+// 4. 활동 및 북마크 (Activity Domain)
+// ==========================================
+
+model BodyPartView {
+  id         Int      @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Uuid
+  bodyPartId Int      @map("body_part_id")
+  viewedAt   DateTime @default(now()) @map("viewed_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bodyPart BodyPart @relation(fields: [bodyPartId], references: [id], onDelete: Cascade)
+
+  @@map("body_part_views")
+}
+
+model BookmarkBodyPart {
+  id         Int      @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Uuid
+  bodyPartId Int      @map("body_part_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bodyPart BodyPart @relation(fields: [bodyPartId], references: [id], onDelete: Cascade)
+
+  @@map("bookmark_body_parts")
+}
+
+model BookmarkHospital {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Uuid
+  placeId   String   @map("place_id") // 외부 지도 API ID
+  name      String
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("bookmark_hospitals")
+}
