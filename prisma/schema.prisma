@@ -30,7 +30,6 @@ model User {
   email         String    @unique
   emailVerified DateTime? @map("email_verified")
   image         String?
-  password      String?   // Credentials 로그인 시 필요 (이미지엔 없지만 필수 권장)
   birthDate     DateTime? @map("birth_date") @db.Date
   gender        Gender?
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -43,6 +42,7 @@ model User {
   bodyPartViews      BodyPartView[]
   bookmarkBodyParts  BookmarkBodyPart[]
   bookmarkHospitals  BookmarkHospital[]
+  searchHistory      SearchHistory[]
 
   @@map("users")
 }
@@ -109,6 +109,7 @@ model BodyPart {
   
   splineObjectId    String? @map("spline_object_id")
   viewCamera        Json?   @map("view_camera")
+  viewCount         Int     @default(0) @map("view_count")
 
   // 관계 설정
   system             BodySystem         @relation(fields: [systemId], references: [id])
@@ -117,6 +118,7 @@ model BodyPart {
   queries            UserQuery[]
   views              BodyPartView[]
   bookmarks          BookmarkBodyPart[]
+  searchHistory      SearchHistory[]
 
   @@map("body_parts")
 }
@@ -238,4 +240,21 @@ model BookmarkHospital {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("bookmark_hospitals")
+}
+
+model SearchHistory {
+  id          Int      @id @default(autoincrement())
+  
+  // 사용자 FK
+  userId      String   @map("user_id") @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // 부위 FK
+  bodyPartId  Int      @map("body_part_id")
+  bodyPart    BodyPart @relation(fields: [bodyPartId], references: [id], onDelete: Cascade)
+  
+  // 조회 시각
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("search_history")
 }

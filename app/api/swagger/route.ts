@@ -5,6 +5,9 @@ import { NextResponse } from 'next/server';
 // 여기서 스키마 파일들을 import 해줘야 레지스트리에 등록이 됩니다.
 // (프로젝트가 커지면 index.ts 등으로 묶어서 관리 권장)
 import '@/lib/schemas/user'; 
+import '@/lib/schemas/bookmark';
+import '@/lib/schemas/body';
+import '@/lib/schemas/disease';
 
 export async function GET() {
   const spec = getOpenApiDocumentation();
