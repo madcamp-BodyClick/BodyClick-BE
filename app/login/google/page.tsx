@@ -1,29 +1,24 @@
-import { redirect } from "next/navigation";
 import GoogleAutoSignIn from "./google-auto-signin";
 
 type LoginGooglePageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     callbackUrl?: string;
     error?: string;
-  };
+  }>;
 };
 
-export default function LoginGooglePage({ searchParams }: LoginGooglePageProps) {
+export default async function LoginGooglePage({
+  searchParams,
+}: LoginGooglePageProps) {
+  const resolvedSearchParams = await searchParams;
   const callbackUrl =
-    typeof searchParams?.callbackUrl === "string"
-      ? searchParams.callbackUrl
+    typeof resolvedSearchParams?.callbackUrl === "string"
+      ? resolvedSearchParams.callbackUrl
       : undefined;
   const error =
-    typeof searchParams?.error === "string" ? searchParams.error : undefined;
-
-  if (error) {
-    const params = new URLSearchParams();
-    if (callbackUrl) {
-      params.set("callbackUrl", callbackUrl);
-    }
-    const qs = params.toString();
-    redirect(qs ? `/login/google?${qs}` : "/login/google");
-  }
+    typeof resolvedSearchParams?.error === "string"
+      ? resolvedSearchParams.error
+      : undefined;
 
   return <GoogleAutoSignIn callbackUrl={callbackUrl} error={error} />;
 }

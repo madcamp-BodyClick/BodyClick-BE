@@ -3,6 +3,17 @@ import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
+const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+const frontendOrigin = new URL(frontendUrl).origin;
+const backendOrigin = new URL(backendUrl).origin;
+const useSecureCookies = backendOrigin.startsWith("https://");
+const isCrossSite = frontendOrigin !== backendOrigin;
+
+const sessionCookieName = useSecureCookies
+  ? "__Secure-next-auth.session-token"
+  : "next-auth.session-token";
+const sessionCookieSameSite = isCrossSite && useSecureCookies ? "none" : "lax";
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   providers: [
@@ -23,12 +34,12 @@ export const authOptions: NextAuthOptions = {
 
   cookies: {
     sessionToken: {
-      name: 'next-auth.session-token',
+      name: sessionCookieName,
       options: {
         httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: false,
+        sameSite: sessionCookieSameSite,
+        path: "/",
+        secure: useSecureCookies,
       },
     },
   },
@@ -40,12 +51,22 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    
-    // ⚠️ 수정 포인트: 절대 경로(http://localhost:3000)를 명시합니다.
+
+    // 프론트 콜백 URL을 우선 사용하고, 허용된 도메인만 리다이렉트합니다.
     async redirect({ url, baseUrl }) {
-      // "/explore"라고만 쓰면 4000번(현재 위치)에서 찾으므로 404가 뜹니다.
-      // 반드시 "http://localhost:3000"을 앞에 붙여주세요.
-      return "http://localhost:3000/explore";
+      if (url.startsWith(frontendOrigin)) {
+        return url;
+      }
+
+      if (url.startsWith(baseUrl)) {
+        return url;
+      }
+
+      if (url.startsWith("/")) {
+        return `${frontendOrigin}${url}`;
+      }
+
+      return `${frontendOrigin}/login`;
     },
   },
 };
