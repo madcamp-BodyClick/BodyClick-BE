@@ -3,9 +3,13 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  // [수정 1] params의 타입을 Promise로 정의해야 합니다.
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const bodyPartId = Number(params.id);
+  // [수정 2] 비동기 params를 await로 풀어서 id를 꺼내야 합니다.
+  const { id } = await params;
+  
+  const bodyPartId = Number(id);
 
   if (isNaN(bodyPartId)) {
     return NextResponse.json(
@@ -16,7 +20,6 @@ export async function GET(
 
   try {
     // Disease 모델이 BodyPart와 관계가 맺어져 있다고 가정
-    // 예: Disease 모델에 bodyPartId가 있거나, 다대다 관계일 경우
     const diseases = await prisma.disease.findMany({
       where: {
         bodyPartId: bodyPartId, 

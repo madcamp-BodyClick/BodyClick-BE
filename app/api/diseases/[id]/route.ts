@@ -1,13 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"; // Request 대신 NextRequest 사용 권장
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  // [수정 1] params의 타입을 Promise로 변경해야 합니다.
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 1. ID 유효성 검사
-    const diseaseId = parseInt(params.id);
+    // [수정 2] 비동기 params를 await로 먼저 풀어줘야 id에 접근 가능합니다.
+    const { id } = await params;
+
+    // 1. ID 유효성 검사 (추출한 id 사용)
+    const diseaseId = parseInt(id);
     if (isNaN(diseaseId)) {
       return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
     }

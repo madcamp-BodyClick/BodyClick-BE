@@ -1,40 +1,57 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from "next/server"; // NextRequest 추가
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  request: NextRequest, // [중요] Request 대신 NextRequest 사용
+  // [중요] params를 Promise 타입으로 정의
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = Number(params.id);
-
-  if (isNaN(id)) {
-    return NextResponse.json(
-      { success: false, message: '유효하지 않은 ID입니다.' },
-      { status: 400 }
-    );
-  }
-
   try {
-    const bodyPart = await prisma.bodyPart.findUnique({
-      where: { id },
+    // [중요] params를 await로 풀어서 id를 꺼냄
+    const { id } = await params;
+
+    const bodyPartId = parseInt(id); 
+    if (isNaN(bodyPartId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+
+    const session = await getServerSession(authOptions);
+
+    // 1. 조회수 증가 및 조회
+    const bodyPart = await prisma.bodyPart.update({
+      where: { id: bodyPartId },
+      data: {
+        viewCount: { increment: 1 }, 
+      },
+      include: {
+        system: true,
+      }
     });
 
-    if (!bodyPart) {
-      return NextResponse.json(
-        { success: false, message: '해당 부위를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+    // 2. 검색 기록 저장 (비동기 처리 유지)
+    if (session?.user?.email) {
+      prisma.user.findUnique({ where: { email: session.user.email } })
+        .then(user => {
+          if (user) {
+            return prisma.searchHistory.create({
+              data: {
+                userId: user.id,
+                bodyPartId: bodyPartId,
+              }
+            });
+          }
+        })
+        .catch(err => console.error("History Save Error:", err));
     }
 
     return NextResponse.json({
       success: true,
-      data: bodyPart, // key_roles, observation_points 등 포함
+      data: {
+        ...bodyPart,
+      },
     });
+
   } catch (error) {
-    console.error('Error fetching body part detail:', error);
-    return NextResponse.json(
-      { success: false, message: '서버 에러가 발생했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Body Part not found" }, { status: 404 });
   }
 }

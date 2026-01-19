@@ -1,21 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"; // Request 대신 NextRequest 사용
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest, // [수정 1] NextRequest로 타입 변경
+  // [수정 2] params의 타입을 Promise로 정의
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // [수정 3] 비동기 params를 await로 먼저 풀어줍니다.
+    const { id } = await params;
+
     // 1. 로그인 세션 확인
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. ID 유효성 검사
-    const bookmarkId = parseInt(params.id);
+    // 2. ID 유효성 검사 (추출한 id 사용)
+    const bookmarkId = parseInt(id);
     if (isNaN(bookmarkId)) {
       return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
     }

@@ -1,21 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"; // [수정] Request -> NextRequest 권장
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  // [수정 1] params의 타입을 Promise로 정의합니다.
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // [수정 2] 비동기 params를 await로 먼저 풀어줍니다.
+    const { id } = await params;
+
     // 1. 로그인 세션 확인
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. ID 유효성 검사
-    const bookmarkId = parseInt(params.id);
+    // 2. ID 유효성 검사 (params.id 대신 추출한 id 사용)
+    const bookmarkId = parseInt(id);
     if (isNaN(bookmarkId)) {
       return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
     }
@@ -39,7 +43,7 @@ export async function DELETE(
     });
 
   } catch (error) {
-    console.error("DELETE /bookmarks/body-parts/[id] Error:", error);
+    console.error("DELETE /bookmarks/hospital/[id] Error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }
