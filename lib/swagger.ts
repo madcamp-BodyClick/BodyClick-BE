@@ -24,6 +24,6 @@ export function getOpenApiDocumentation() {
       title: 'Next.js Zod-OpenAPI Project',
       description: 'Zod 스키마를 기반으로 자동 생성된 API 명세서입니다.',
     },
-    servers: [{ url: 'http://localhost:3000/api' }],
+    servers: [{ url: 'http://localhost:4000/api' }],
   });
 }
