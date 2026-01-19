@@ -38,7 +38,7 @@ model User {
   accounts           Account[]
   sessions           Session[]
   userQueries        UserQuery[]
-  medicalContext     UserMedicalContext? // 1:1 관계
+  medicalContext     UserMedicalContext[] 
   bodyPartViews      BodyPartView[]
   bookmarkBodyParts  BookmarkBodyPart[]
   bookmarkHospitals  BookmarkHospital[]
@@ -102,7 +102,8 @@ model BodyPart {
   code              String  @unique
   nameKo            String  @map("name_ko")
   nameEn            String  @map("name_en")
-  
+  description       String? @db.Text
+
   // JSON 데이터 타입
   keyRoles          Json?   @map("key_roles")
   observationPoints Json?   @map("observation_points")
@@ -188,17 +189,19 @@ model UserQuery {
 
 // 사용자별 의료 컨텍스트 (User와 1:1 관계)
 model UserMedicalContext {
-  userId          String    @id @map("user_id") @db.Uuid
-  summaryText     String?   @map("summary_text") @db.Text
-  agentId         Int?      @map("agent_id")
-  medicalTags     Json?     @map("medical_tags")
-  lastConsultedAt DateTime? @map("last_consulted_at")
-  riskLevel       Int?      @map("risk_level")
+  id               Int      @id @default(autoincrement()) 
+  userId           String   @map("user_id") @db.Uuid
+  agentId          Int      @map("agent_id")
+  
+  summary          String   @db.Text             // AI 요약
+  
+  riskLevel        Int      @map("risk_level")   // 위험도 (1~5)
+  consultedAt      DateTime @default(now()) @map("last_consulted_at")
 
-  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agent LlmAgent? @relation(fields: [agentId], references: [id])
+  user             User     @relation(fields: [userId], references: [id])
+  agent            LlmAgent    @relation(fields: [agentId], references: [id])
 
-  @@map("user_medical_context")
+  @@map("user_medical_contexts")
 }
 
 // ==========================================

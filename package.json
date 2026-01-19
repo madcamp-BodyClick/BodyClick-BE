@@ -23,6 +23,11 @@
   "devDependencies": {
     "@types/node": "^25.0.9",
     "@types/swagger-ui-react": "^5.18.0",
+    "ts-node": "^1.7.1",
+    "tsx": "^4.21.0",
     "typescript": "5.9.3"
-  }
+  },
+  "prisma": {
+  "seed": "tsx prisma/seed.ts"
+}
 }
