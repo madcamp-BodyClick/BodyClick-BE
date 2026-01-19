@@ -8,6 +8,7 @@ import '@/lib/schemas/user';
 import '@/lib/schemas/bookmark';
 import '@/lib/schemas/body';
 import '@/lib/schemas/disease';
+import '@/lib/schemas/map';
 
 export async function GET() {
   const spec = getOpenApiDocumentation();
