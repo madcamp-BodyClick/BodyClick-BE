@@ -4,8 +4,10 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+// 👇 [추가] RAG 검색 유틸리티 가져오기 (경로에 주의하세요!)
+import { searchMedicalKnowledge } from "../utils/search";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-2.0-flash"; // 최신 모델 사용 권장 (gemini-1.5-flash 또는 gemini-2.0-flash)
 
 function getGeminiKey(): string {
   const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
@@ -29,7 +31,6 @@ async function callGeminiJSON<T>(systemPrompt: string, userMessage: string): Pro
   const key = getGeminiKey();
   const genAI = new GoogleGenerativeAI(key);
 
-  // 모델 인스턴스 생성
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction: systemPrompt,
@@ -37,10 +38,9 @@ async function callGeminiJSON<T>(systemPrompt: string, userMessage: string): Pro
 
   const chat = model.startChat({
     generationConfig: {
-      temperature: 0.2,
+      temperature: 0.2, // RAG 사용 시 사실 기반 답변을 위해 온도를 낮춤
       responseMimeType: "application/json",
     },
-    // 👇 [수정 2] 문자열 대신 Enum 사용
     safetySettings: [
       {
         category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -76,17 +76,30 @@ async function callGeminiJSON<T>(systemPrompt: string, userMessage: string): Pro
   }
 }
 
-function buildAnswerPrompt(bodyPartLabel: string, previousSummary?: string): string {
+// 👇 [수정] ragContext(검색된 지식)를 받을 수 있도록 파라미터 추가
+function buildAnswerPrompt(bodyPartLabel: string, previousSummary?: string, ragContext?: string): string {
+  let contextSection = `Current context - Body Part: ${bodyPartLabel}.`;
+  
+  if (previousSummary) {
+    contextSection += `\nPrevious Context Summary: ${previousSummary}`;
+  } else {
+    contextSection += "\nNo previous context.";
+  }
+
+  // RAG 지식이 있으면 프롬프트에 추가
+  if (ragContext) {
+    contextSection += `\n\n[Medical Knowledge Base (Reference)]:\n${ragContext}\n\nIMPORTANT: Use the information from the [Medical Knowledge Base] above to answer the user's question accurately. If the information is not sufficient, rely on general medical knowledge but be conservative.`;
+  }
+
   return [
     "You are a helpful medical AI assistant.",
     "Respond in Korean.",
-    `Current context - Body Part: ${bodyPartLabel}.`,
-    previousSummary ? `Previous Context Summary: ${previousSummary}` : "No previous context.",
+    contextSection,
     "",
     "Analyze the user's symptom and provide a JSON response.",
     "The schema must be exactly:",
     "{",
-    '  "answer": "string (medical advice)",',
+    '  "answer": "string (medical advice based on the Knowledge Base if available)",',
     '  "confidence_score": "number (0.0-1.0)",',
     '  "risk_level": "integer (1=safe, 5=emergency)",',
     '  "updated_summary": "string (summarize current symptom + previous context for future reference)"',
@@ -106,7 +119,7 @@ export async function POST(request: NextRequest) {
       console.log("   User ID:", (session.user as any).id);
     }
 
-    // 세션이 없거나, 유저 정보(특히 ID)가 없으면 거부
+    // 세션 인증 확인
     if (!session || !session.user) {
       console.log("❌ 인증 실패: 세션이 만료되었거나 존재하지 않음");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -118,7 +131,6 @@ export async function POST(request: NextRequest) {
        console.log("❌ 인증 실패: 세션은 있으나 User ID를 찾을 수 없음");
        return NextResponse.json({ error: "Unauthorized: Missing User ID" }, { status: 401 });
     }
-    // ============================================================
 
     // 2. 입력값 검증
     const body = await request.json();
@@ -146,13 +158,23 @@ export async function POST(request: NextRequest) {
 
     const label = bodyPart.nameKo || bodyPart.nameEn || "Unknown Part";
     
-    // 4. AI 답변 생성
+    // 👇 [추가] 4. RAG 검색 실행 (벡터 DB 조회)
+    console.log(`🔍 RAG 검색 시작: "${question}"`);
+    const ragContext = await searchMedicalKnowledge(question);
+    
+    if (ragContext) {
+      console.log("✅ RAG 검색 성공: 관련 지식을 찾았습니다.");
+    } else {
+      console.log("⚠️ RAG 검색 결과 없음 (일반 답변으로 진행)");
+    }
+
+    // 5. AI 답변 생성 (검색된 컨텍스트 전달)
     const aiResponse = await callGeminiJSON<GeminiResponse>(
-      buildAnswerPrompt(label, previous_summary),
+      buildAnswerPrompt(label, previous_summary, ragContext), // ragContext 추가
       question
     );
 
-    // 5. DB 저장 (userId 사용)
+    // 6. DB 저장 (userId 사용)
     const saved = await prisma.userQuery.create({
       data: {
         userId: userId,
@@ -163,7 +185,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 6. 응답 생성
+    // 7. 응답 생성
     return NextResponse.json({
       success: true,
       data: {
@@ -173,7 +195,8 @@ export async function POST(request: NextRequest) {
         created_at: saved.createdAt,
         medical_context: {
           summary: aiResponse.updated_summary,
-          risk_level: aiResponse.risk_level
+          risk_level: aiResponse.risk_level,
+          is_rag_used: !!ragContext // 프론트엔드 디버깅용 (RAG 사용 여부)
         }
       },
     });
