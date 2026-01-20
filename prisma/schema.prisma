@@ -6,12 +6,16 @@
 
 // 1. 설정 (Prisma 5.22.0 기준)
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // 👇 [추가] PostgreSQL 확장 기능 활성화 (Vector 사용을 위해 필수)
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // 👇 [추가] pgvector 확장 활성화
+  extensions = [vector]
 }
 
 // ==========================================
@@ -35,14 +39,14 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
 
   // 관계 설정 (Relations)
-  accounts           Account[]
-  sessions           Session[]
-  userQueries        UserQuery[]
-  medicalContext     UserMedicalContext[] 
-  bodyPartViews      BodyPartView[]
-  bookmarkBodyParts  BookmarkBodyPart[]
-  bookmarkHospitals  BookmarkHospital[]
-  searchHistory      SearchHistory[]
+  accounts          Account[]
+  sessions          Session[]
+  userQueries       UserQuery[]
+  medicalContext    UserMedicalContext[]
+  bodyPartViews     BodyPartView[]
+  bookmarkBodyParts BookmarkBodyPart[]
+  bookmarkHospitals BookmarkHospital[]
+  searchHistory     SearchHistory[]
 
   @@map("users")
 }
@@ -107,19 +111,19 @@ model BodyPart {
   // JSON 데이터 타입
   keyRoles          Json?   @map("key_roles")
   observationPoints Json?   @map("observation_points")
-  
-  splineObjectId    String? @map("spline_object_id")
-  viewCamera        Json?   @map("view_camera")
-  viewCount         Int     @default(0) @map("view_count")
+
+  splineObjectId String? @map("spline_object_id")
+  viewCamera     Json?   @map("view_camera")
+  viewCount      Int     @default(0) @map("view_count")
 
   // 관계 설정
-  system             BodySystem         @relation(fields: [systemId], references: [id])
-  diseases           Disease[]
-  relatedAgents      BodyPartAgent[]
-  queries            UserQuery[]
-  views              BodyPartView[]
-  bookmarks          BookmarkBodyPart[]
-  searchHistory      SearchHistory[]
+  system        BodySystem         @relation(fields: [systemId], references: [id])
+  diseases      Disease[]
+  relatedAgents BodyPartAgent[]
+  queries       UserQuery[]
+  views         BodyPartView[]
+  bookmarks     BookmarkBodyPart[]
+  searchHistory SearchHistory[]
 
   @@map("body_parts")
 }
@@ -189,19 +193,20 @@ model UserQuery {
 
 // 사용자별 의료 컨텍스트 (User와 1:1 관계)
 model UserMedicalContext {
-  id               Int      @id @default(autoincrement()) 
-  userId           String   @map("user_id") @db.Uuid
-  agentId          Int      @map("agent_id")
-  
-  summary          String   @db.Text             // AI 요약
-  
-  riskLevel        Int      @map("risk_level")   // 위험도 (1~5)
-  consultedAt      DateTime @default(now()) @map("last_consulted_at")
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id") @db.Uuid
+  agentId     Int      @map("agent_id")
 
-  user             User     @relation(fields: [userId], references: [id])
-  agent            LlmAgent    @relation(fields: [agentId], references: [id])
+  summary     String   @db.Text // AI 요약
 
-  @@map("user_medical_contexts")
+  riskLevel   Int      @map("risk_level") // 위험도 (1~5)
+  consultedAt DateTime @default(now()) @map("last_consulted_at")
+
+  user  User     @relation(fields: [userId], references: [id])
+  agent LlmAgent @relation(fields: [agentId], references: [id])
+
+  // 👇 [수정] 이미지 제목에 맞춰 단수형으로 변경
+  @@map("user_medical_context") 
 }
 
 // ==========================================
@@ -246,18 +251,35 @@ model BookmarkHospital {
 }
 
 model SearchHistory {
-  id          Int      @id @default(autoincrement())
-  
+  id         Int      @id @default(autoincrement())
+
   // 사용자 FK
-  userId      String   @map("user_id") @db.Uuid
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // 부위 FK
-  bodyPartId  Int      @map("body_part_id")
-  bodyPart    BodyPart @relation(fields: [bodyPartId], references: [id], onDelete: Cascade)
-  
+  bodyPartId Int      @map("body_part_id")
+  bodyPart   BodyPart @relation(fields: [bodyPartId], references: [id], onDelete: Cascade)
+
   // 조회 시각
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@map("search_history")
+}
+
+model MedicalKnowledge {
+  id        Int      @id @default(autoincrement())
+  category  String   // 예: "두통", "복통", "심혈관"
+  
+  // 👇 [수정] 긴 텍스트 저장을 위해 @db.Text 추가
+  content   String   @db.Text 
+
+  // 벡터 데이터 (Gemini Embedding은 768차원)
+  embedding Unsupported("vector(768)")?
+
+  // 👇 [권장] DB 컬럼명을 다른 테이블과 통일성 있게 snake_case로 매핑
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("medical_knowledge")
 }
