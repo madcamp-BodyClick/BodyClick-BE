@@ -8,6 +8,7 @@ import '@/lib/schemas/user';
 import '@/lib/schemas/bookmark';
 import '@/lib/schemas/body';
 import '@/lib/schemas/disease';
+import '@/lib/schemas/ai-chat';
 import '@/lib/schemas/map';
 import '@/lib/schemas/common';
 
