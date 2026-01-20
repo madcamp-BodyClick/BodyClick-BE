@@ -33,7 +33,7 @@ export async function searchMedicalKnowledge(query: string): Promise<string> {
         category,
         1 - (embedding <=> ${vectorQuery}::vector) as similarity
       FROM "medical_knowledge"
-      WHERE 1 - (embedding <=> ${vectorQuery}::vector) > 0.3 -- 유사도 0.3 이상 (기준 완화)
+      WHERE 1 - (embedding <=> ${vectorQuery}::vector) > 0.6
       ORDER BY similarity DESC
       LIMIT 3;
     `;
@@ -46,7 +46,7 @@ export async function searchMedicalKnowledge(query: string): Promise<string> {
 
     // AI에게 제공할 참고 지식 포맷팅
     const contextText = searchResults
-      .map((r, i) => `[참고지식 ${i + 1} | ${r.category}]\n${r.content}`)
+      .map((r:SearchResult, i: number) => `[참고지식 ${i + 1} | ${r.category}]\n${r.content}`)
       .join("\n\n");
 
     console.log(`✅ RAG 검색 성공: ${searchResults.length}개의 지식을 찾았습니다.`);
