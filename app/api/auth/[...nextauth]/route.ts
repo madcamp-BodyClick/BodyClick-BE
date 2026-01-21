@@ -3,8 +3,8 @@ import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
-const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-const backendUrl = process.env.NEXTAUTH_URL || "http://localhost:4000";
+const frontendUrl = "https://bodyclick-server.me";
+const backendUrl ="https://bodyclick-server.me";
 const frontendOrigin = new URL(frontendUrl).origin;
 const backendOrigin = new URL(backendUrl).origin;
 const useSecureCookies = backendOrigin.startsWith("https://");
