@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const response = await fetch(kakaoUrl, {
       method: "GET",
       headers: {
-        Authorization: `KakaoAK ${process.env.KAKAO_MAP_REST_API_KEY}`, // REST API 키 사용
+        Authorization: `KakaoAK ${process.env.NEXT_PUBLIC_KAKAO_API_KEY}`, // REST API 키 사용
       },
     });
 
