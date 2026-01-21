@@ -1,23 +1,22 @@
-import { NextRequest, NextResponse } from "next/server"; // NextRequest 추가
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Auth 관련 import는 이제 필요 없으므로 삭제했습니다.
+
 export async function GET(
-  request: NextRequest, // [중요] Request 대신 NextRequest 사용
-  // [중요] params를 Promise 타입으로 정의
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // [중요] params를 await로 풀어서 id를 꺼냄
     const { id } = await params;
 
     const bodyPartId = parseInt(id); 
-    if (isNaN(bodyPartId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    if (isNaN(bodyPartId)) {
+      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    }
 
-    const session = await getServerSession(authOptions);
-
-    // 1. 조회수 증가 및 조회
+    // 1. 조회수 증가 및 상세 정보 조회
+    // (기록은 따로 저장하지만, '인기 부위' 산정을 위해 전체 조회수(viewCount)는 여기서 올리는 게 맞습니다)
     const bodyPart = await prisma.bodyPart.update({
       where: { id: bodyPartId },
       data: {
@@ -25,33 +24,20 @@ export async function GET(
       },
       include: {
         system: true,
+        // 필요하다면 diseases 등 다른 연관 관계도 여기서 include 하세요
       }
     });
 
-    // 2. 검색 기록 저장 (비동기 처리 유지)
-    if (session?.user?.email) {
-      prisma.user.findUnique({ where: { email: session.user.email } })
-        .then(user => {
-          if (user) {
-            return prisma.searchHistory.create({
-              data: {
-                userId: user.id,
-                bodyPartId: bodyPartId,
-              }
-            });
-          }
-        })
-        .catch(err => console.error("History Save Error:", err));
-    }
+    // 2. [삭제됨] 검색 기록 저장 로직
+    // 이유: 이제 클라이언트에서 /api/common/history API를 호출하여 처리합니다.
 
     return NextResponse.json({
       success: true,
-      data: {
-        ...bodyPart,
-      },
+      data: bodyPart,
     });
 
   } catch (error) {
+    console.error("BodyPart Detail Error:", error);
     return NextResponse.json({ error: "Body Part not found" }, { status: 404 });
   }
 }
